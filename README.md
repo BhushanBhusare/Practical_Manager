@@ -22,22 +22,22 @@ You must be running a Debian-based Linux distribution (like Ubuntu or Kali) to u
 # Setup :
 
 1. Clone the Project    
-    git clone ( git clone https://github.com/BhushanBhusare/Practical_Manager.git && cd Practical_Manager )
+    git clone [ git clone https://github.com/BhushanBhusare/Practical_Manager.git && cd Practical_Manager ]
 
 2. Run Initial Setup (System-Wide)
 The first time this project is run on a machine, it requires sudo to install necessary packages (gcc, mutt, gedit) and set the file permissions correctly.
 
-   ( ''' Set scripts as executable
-    chmod +x setup.sh Practical_manager.sh core_setup.sh )
+   '''Set scripts as executable '''
+   [ chmod +x setup.sh Practical_manager.sh core_setup.sh ]
 
     Run the setup script
-    (sudo bash setup.sh)
+    [ sudo bash setup.sh ]
 
 3. Launch and Create Your Profile
 After the setup is complete, run the application as a normal user (without sudo). The application will guide you through creating your unique profile.
 
+  [  ./Practical_manager.sh ]
 
-    ./Practical_manager.sh
 
 
 
