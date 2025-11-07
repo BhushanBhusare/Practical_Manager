@@ -5,16 +5,12 @@
 # Description: Collects user profile data, installs packages, and fixes permissions.
 # ===============================================
 
-# Global configuration paths (Now simple relative names)
+# Global configuration paths
 DATA_DIR="data"
-PROFILES_DIR="$DATA_DIR/profiles"
-CURRENT_USER_FILE="$DATA_DIR/current_user.txt"
-
-# CRITICAL FIX: PROJECT_ROOT is the ABSOLUTE path of the project directory.
+USER_FILE="$DATA_DIR/user.txt"
 PROJECT_ROOT="$(pwd)/" 
 
-# --- Utility Functions (Omitted aniecho, install_packages for brevity, they are assumed to be present) ---
-# ... (aniecho function)
+# --- Utility Functions ---
 aniecho(){
     local text="$1"
     local newline="${2:-true}"
@@ -27,22 +23,33 @@ aniecho(){
         echo
     fi
 }
-# ... (install_packages function)
+
 install_packages() {
     echo "==================================="
     aniecho "[*] Checking and Installing prerequisites..."
+    echo "==================================="
+    
     REQUIRED_PACKAGES="vim nano mutt mailutils curl wget gnupg2 build-essential gedit git"
     export DEBIAN_FRONTEND=noninteractive
+
     sudo apt update -y 
+    if [ $? -ne 0 ]; then aniecho "[!] Error updating system."; return 1; fi
+    
     sudo apt install -y $REQUIRED_PACKAGES
+    
     unset DEBIAN_FRONTEND
     if [ $? -ne 0 ]; then aniecho "[!] Error installing packages."; return 1; fi
+
     aniecho "[+] All required packages installed successfully!"
     return 0
 }
 
 # --- Core User Creation Function ---
 create_new_profile_logic() {
+    echo "===================================="
+    aniecho "[*] Creating NEW User Profile..."
+    echo "===================================="
+    
     ORIGINAL_USER=${SUDO_USER:-$(whoami)}
     ORIGINAL_HOME=$(getent passwd "$ORIGINAL_USER" | cut -d: -f6)
 
@@ -54,14 +61,7 @@ create_new_profile_logic() {
             aniecho "$prompt" false
             read input < /dev/tty
             
-            # Check 1: Ensure name doesn't conflict with existing profile
-            if [[ "$var_name" == "username" ]]; then
-                SAFE_FILENAME=$(echo "$input" | tr ' ' '_')
-                if [[ -f "$PROJECT_ROOT$PROFILES_DIR/$SAFE_FILENAME.txt" ]]; then
-                    aniecho "[ERROR] Profile for '$input' already exists. Aborting creation."
-                    return 1
-                fi
-            fi
+            if [[ -z "$input" ]]; then aniecho "[!] Input cannot be empty. Please try again."; continue; fi
 
             aniecho "You entered: **$input**. Is this correct? (y/n): " false
             read confirm < /dev/tty
@@ -73,7 +73,7 @@ create_new_profile_logic() {
         return 0
     }
     
-    # Input Collection (Exiting if read fails, or profile exists)
+    # Input Collection (This relies on read_input which reads from /dev/tty even under sudo)
     if ! read_input "Enter User Name (Full Name): " username; then return 1; fi
     if ! read_input "Enter Roll No: " rollno; then return 1; fi
     read_input "Enter Department: " department
@@ -85,17 +85,19 @@ create_new_profile_logic() {
     lang_ext=".c"; lang_name="C"
     editor_cmd="nano" 
     
-    # --- Construct Paths ---
+    # --- Construct and Create Paths ---
     SAFE_FILENAME=$(echo "$username" | tr ' ' '_')
-    USER_PROFILE_FILE="$PROJECT_ROOT$PROFILES_DIR/$SAFE_FILENAME.txt"
+    
     DESKTOP_PRAC_DIR="$ORIGINAL_HOME/Desktop/${SAFE_FILENAME}_Practicals"
     INTERNAL_DATA_PATH="$PROJECT_ROOT$DATA_DIR"
-
-    # --- Create Directories and Write Data ---
-    mkdir -p "$PROJECT_ROOT$DATA_DIR" "$PROJECT_ROOT$PROFILES_DIR"
-    mkdir -p "$DESKTOP_PRAC_DIR"
+    FINAL_USER_FILE="$PROJECT_ROOT$DATA_DIR/profiles/$SAFE_FILENAME.txt" 
+    CURRENT_USER_ACTIVE_FILE="$PROJECT_ROOT$DATA_DIR/current_user.txt"
     
-    # Guaranteed write using tee
+    # Create directories
+    mkdir -p "$PROJECT_ROOT$DATA_DIR" "$PROJECT_ROOT$DATA_DIR/profiles"
+    mkdir -p "$DESKTOP_PRAC_DIR"
+
+    # --- Write Data to user.txt (Guaranteed write using tee) ---
     {
         echo "Name:$username"
         echo "Gender:$gender"
@@ -109,47 +111,81 @@ create_new_profile_logic() {
         echo "Practicals_Code_Dir:$DESKTOP_PRAC_DIR"
         echo "Practicals_Data_Dir:$INTERNAL_DATA_PATH"
         echo "Editor_CMD:$editor_cmd"
-        echo "Profile_ID:$SAFE_FILENAME" # Unique identifier
-    } | sudo tee "$USER_PROFILE_FILE" > /dev/null
+    } | sudo tee "$FINAL_USER_FILE" > /dev/null
 
     # Set the newly created profile as the current active profile
-    echo "$USER_PROFILE_FILE" | sudo tee "$PROJECT_ROOT$CURRENT_USER_FILE" > /dev/null
+    echo "$FINAL_USER_FILE" | sudo tee "$CURRENT_USER_ACTIVE_FILE" > /dev/null
 
     # --- Permission Fix (CRITICAL) ---
     sudo chown -R "$ORIGINAL_USER":"$ORIGINAL_USER" "$PROJECT_ROOT"
     sudo chown -R "$ORIGINAL_USER":"$ORIGINAL_USER" "$DESKTOP_PRAC_DIR"
     
-    aniecho "[+] Profile created: $username. Setup successful."
+    # Verify the write operation
+    if [[ -f "$FINAL_USER_FILE" && -s "$FINAL_USER_FILE" ]]; then
+        aniecho "[+] Setup data saved successfully."
+    else
+        aniecho "[FATAL] Data write failed. Setup aborted."
+        return 1
+    fi
     return 0
+}
+
+setup_mutt() {
+    echo "==============================="
+    aniecho "[*] Project Email Setup (Mutt)"
+    echo "==============================="
+
+    SENDER_EMAIL="practical.manager01@gmail.com"
+    APP_PASSWORD="wlpk kmnf fshh lqnc" 
+    REAL_NAME="Practical Manager"
+    
+    if [[ "$APP_PASSWORD" == "wlpk kmnf fshh lqnc" ]]; then
+        aniecho "[!] WARNING: Please update the APP_PASSWORD in core_setup.sh for email functionality."
+    fi
+
+    ORIGINAL_USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    MUTT_RC="$ORIGINAL_USER_HOME/.muttrc"
+
+    cat > "$MUTT_RC" <<EOF
+set realname = "$REAL_NAME"
+set from = "$SENDER_EMAIL"
+set use_from = yes
+set envelope_from = yes
+
+set smtp_url = "smtps://$SENDER_EMAIL@smtp.gmail.com:465/"
+set smtp_pass = "$APP_PASSWORD"
+set ssl_force_tls = yes
+set editor="nano"
+set move = no
+set charset="utf-8"
+EOF
+
+    sudo chown "$SUDO_USER":"$SUDO_USER" "$MUTT_RC"
+    sudo chmod 600 "$MUTT_RC"
+
+    aniecho "[+] Mutt configured successfully!"
 }
 
 # --- Main Execution ---
 main() {
     if [ -z "$SUDO_USER" ]; then aniecho "[FATAL] core_setup.sh must be run via setup.sh using sudo."; exit 1; fi
     
-    # Installation (only run once)
-    if ! command -v mutt &> /dev/null; then
-        if ! install_packages; then exit 1; fi
-    fi
+    if ! install_packages; then exit 1; fi
     
-    # Create required directory structure
-    mkdir -p "$PROJECT_ROOT$PROFILES_DIR"
-
     # If no profile exists, force creation
     if [[ ! -f "$PROJECT_ROOT$CURRENT_USER_FILE" ]] || [[ -z "$(ls -A "$PROJECT_ROOT$PROFILES_DIR" 2>/dev/null)" ]]; then
-        aniecho "--- No existing profiles found. Creating initial profile. ---"
-        if ! create_new_profile_logic; then
-            aniecho "[FATAL] Initial profile creation failed."
-            exit 1
-        fi
+        aniecho "--- Initial Setup: Creating first profile. ---"
+        if ! create_new_profile_logic; then exit 1; fi
     fi
 
-    # Mutt Setup (Must run once per user in their HOME dir, which is handled via chown)
-    # The actual mutt config file creation is omitted here for brevity but assumes it runs.
-
+    setup_mutt
+    
     echo "========================================================="
     aniecho "Setup completed! Application ready."
     echo "========================================================="
 }
 
 main
+
+
+
