@@ -1,0 +1,30 @@
+# -----------------------------------------------
+# Project: Practical Management Software
+# -----------------------------------------------
+
+# 1. CRITICAL: USER CONFIGURATION AND PROFILES
+# These files contain local paths, the currently active user, and profile data.
+# They must NOT be shared on GitHub as they break the setup for others and pose a security risk.
+data/current_user.txt
+data/profiles/*.txt
+data/user.txt
+
+# 2. GENERATED METADATA AND OUTPUTS
+# These folders are created every time a user starts a practical, containing headers and output logs.
+# We ignore the entire contents of the numbered directories within 'data/'.
+data/*/
+data/*/*
+!data/ # Do not ignore the empty 'data/' directory itself
+
+# 3. GENERATED BINARIES AND TEMPORARY FILES
+# Ignore compiled executables (from C code) and temporary OS files.
+*.out
+*.a # Archive files
+*.o # Object files
+/tmp/*
+*~
+*.bak
+
+# 4. EXTERNAL DESKTOP FOLDERS
+# Ignore the external folder created on the user's desktop, as paths are absolute.
+*Practicals/
