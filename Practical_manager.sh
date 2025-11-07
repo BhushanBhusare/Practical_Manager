@@ -1,11 +1,11 @@
 #!/bin/bash
 # ===============================================
 # Project: Practical Management Software
-# File: Practical_manager.sh (Final Multi-User System)
+# File: Practical_manager.sh
 # Description: Main menu-driven practical management utility.
 # ===============================================
 
-# --- Initial Path Resolution (Absolute) ---
+# --- Initial Path Resolution ---
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 DATA_DIR="$SCRIPT_DIR/data"
 PROFILES_DIR="$DATA_DIR/profiles"
@@ -16,14 +16,12 @@ USER_FILE_TEMP="$CURRENT_USER_FILE"
 USER_FILE=""
 USER_SALUTATION=""
 
-# --- Utility Functions (Only aniecho provided for brevity) ---
+# --- Utility Functions ---
 aniecho(){
     local text="$1"; local newline="${2:-true}"
     for(( i=0;i<${#text};i++ )); do echo -n "${text:$i:1}"; sleep 0.005; done
     if [[ "$newline" == true ]]; then echo; fi
 }
-
-# --- Login & Data Handling Functions ---
 
 # Function to load configuration variables after successful login
 load_user_config() {
@@ -53,127 +51,14 @@ load_user_config() {
     elif [[ "$USER_GENDER" =~ ^[Ff] ]]; then USER_SALUTATION="Ma'am";
     else USER_SALUTATION=""; fi
 
+    # Update current_user.txt to ensure next launch uses this profile
     echo "$USER_CONFIG_PATH" > "$CURRENT_USER_FILE"
     
     aniecho "Successfully loaded profile: **$USER_NAME**."
     return 0
 }
 
-# CRITICAL NEW FUNCTION: Handles interactive input and calls sudo internally
-create_new_user_via_settings() {
-    aniecho "========================================"
-    aniecho "[*] Starting NEW Profile Creation..."
-    aniecho "========================================"
-    
-    # 1. Collect all interactive data first (as normal user)
-    local username rollno department year branch subject gender 
-    
-    read_input() {
-        local prompt="$1"; local var_name="$2"; local input
-        while true; do
-            aniecho "$prompt" false; read input;
-            if [[ -z "$input" ]]; then aniecho "[ERROR] Input cannot be empty."; continue; fi
-            
-            # Check: Ensure name doesn't conflict with existing profile
-            if [[ "$var_name" == "username" ]]; then
-                local SAFE_FILENAME=$(echo "$input" | tr ' ' '_')
-                if [[ -f "$PROFILES_DIR/$SAFE_FILENAME.txt" ]]; then aniecho "[ERROR] Profile '$input' already exists. Try again."; continue; fi
-            fi
-            
-            aniecho "You entered: **$input**. Is this correct? (y/n): " false; read confirm
-            if [[ $confirm =~ ^[yY]$ ]]; then eval $var_name='$input'; break; fi
-        done
-        return 0
-    }
-
-    if ! read_input "Enter User Name (Full Name): " username; then return 1; fi
-    if ! read_input "Enter Roll No: " rollno; then return 1; fi
-    read_input "Enter Department: " department
-    read_input "Enter Academic Year: " year
-    read_input "Enter Branch with Batch: " branch
-    read_input "Enter Subject Name: " subject
-    read_input "Enter Gender (M/F/Other): " gender
-    
-    local SAFE_FILENAME=$(echo "$username" | tr ' ' '_')
-    local TEMP_SCRIPT_FILE="/tmp/profile_setup_$$$RANDOM.sh"
-    
-    # Write a temporary script that contains the sudo-requiring logic
-    cat > "$TEMP_SCRIPT_FILE" << EOF
-#!/bin/bash
-# --- Sudo script for creating user profile ---
-
-# Define variables using collected data
-username="$username"
-rollno="$rollno"
-department="$department"
-year="$year"
-branch="$branch"
-subject="$subject"
-gender="$gender"
-SAFE_FILENAME="$SAFE_FILENAME"
-LANG_EXT=".c"
-LANG_NAME="C"
-EDITOR_CMD="nano"
-
-ORIGINAL_USER=\$SUDO_USER
-ORIGINAL_HOME=\$(getent passwd "\$ORIGINAL_USER" | cut -d: -f6)
-PROJECT_ROOT="$SCRIPT_DIR/" 
-
-PROFILES_DIR="\$PROJECT_ROOT$DATA_DIR/profiles"
-CURRENT_USER_FILE="\$PROJECT_ROOT$DATA_DIR/current_user.txt"
-USER_PROFILE_FILE="\$PROFILES_DIR/\$SAFE_FILENAME.txt"
-DESKTOP_PRAC_DIR="\$ORIGINAL_HOME/Desktop/\$SAFE_FILENAME\_Practicals"
-INTERNAL_DATA_PATH="\$PROJECT_ROOT$DATA_DIR"
-
-# 1. Create directories
-mkdir -p "\$PROFILES_DIR"
-mkdir -p "\$DESKTOP_PRAC_DIR"
-
-# 2. Write profile data
-cat > "\$USER_PROFILE_FILE" << DATA_EOF
-Name:\$username
-Gender:\$gender
-RollNo:\$rollno
-Department:\$department
-Year:\$year
-Branch:\$branch
-Subject:\$subject
-Language_Ext:\$LANG_EXT
-Language_Name:\$LANG_NAME
-Practicals_Code_Dir:\$DESKTOP_PRAC_DIR
-Practicals_Data_Dir:\$INTERNAL_DATA_PATH
-Editor_CMD:\$EDITOR_CMD
-DATA_EOF
-
-# 3. Set current user file
-echo "\$USER_PROFILE_FILE" > "\$CURRENT_USER_FILE"
-
-# 4. Fix permissions (Crucial)
-chown -R "\$ORIGINAL_USER": "\$PROJECT_ROOT"
-chown -R "\$ORIGINAL_USER": "\$DESKTOP_PRAC_DIR"
-chown "\$ORIGINAL_USER": "\$CURRENT_USER_FILE"
-chown "\$ORIGINAL_USER": "\$USER_PROFILE_FILE"
-
-echo "[SUCCESS] Profile files created."
-EOF
-
-    # 3. Execute the temporary script with sudo
-    chmod +x "$TEMP_SCRIPT_FILE"
-    sudo "$TEMP_SCRIPT_FILE"
-
-    # 4. Cleanup and return status
-    local STATUS=$?
-    rm -f "$TEMP_SCRIPT_FILE"
-    
-    if [[ $STATUS -eq 0 ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-
-# Function to display user selection menu and handle login/creation
+# CRITICAL: Function to handle user selection and switching
 func_switch_user() {
     local CHOICE
 
@@ -198,7 +83,7 @@ func_switch_user() {
             aniecho " (No profiles found)"
         fi
 
-        aniecho " C) Create New Profile (Automatic)"
+        aniecho " C) Create New Profile (Requires sudo)"
         aniecho " L) Login/Switch Profile (Enter Index)"
         aniecho " 0) Return to Main Menu"
         
@@ -208,12 +93,10 @@ func_switch_user() {
         if [[ "$CHOICE" =~ ^[0]$ ]]; then
             return 0 # Exit function
         elif [[ "$CHOICE" =~ ^[Cc]$ ]]; then
-            if create_new_user_via_settings; then
-                aniecho "Profile created. Please run the application again to log in with the new user."
-                exit 0 # Exit application to force clean reload
-            else
-                aniecho "[ERROR] Profile creation failed. Please check permissions."
-            fi
+            # New user creation requires running setup.sh with sudo
+            aniecho "[ACTION REQUIRED] Creating a new profile requires system permissions (sudo)."
+            aniecho "Please run 'sudo bash setup.sh' to create the profile, then relaunch."
+            exit 1
         elif [[ "$CHOICE" =~ ^[Ll]$ ]]; then
             aniecho "Enter Profile Index (1-$profile_count): " false
             read INDEX
@@ -255,7 +138,7 @@ else
     fi
 fi
 
-# --- Core Application Functions (Copied from final validated logic) ---
+# --- Core Application Functions (Main Logic) ---
 
 get_file_paths() {
     local prn="$1"
@@ -536,7 +419,8 @@ func_settings() {
                 ;;
             9) # Switch/Add User
                 if func_switch_user; then
-                   # If switch/create was successful, force return to main application loop
+                   # Call synchronization after switching
+                   update_user_metadata 
                    return 0
                 fi
                 continue
@@ -550,7 +434,11 @@ func_settings() {
         
         if [[ -n "$new_val" ]]; then
             sed -i "s/^${FIELD_KEY}:.*$/${FIELD_KEY}:${new_val}/g" "$SETTINGS_FILE"
-            aniecho "[+] $FIELD_KEY updated successfully! Restart application to apply changes."
+            
+            # --- CRITICAL ACTION: Synchronize Data ---
+            update_user_metadata
+            
+            aniecho "[+] $FIELD_KEY updated successfully! Application data synchronized."
         else
             aniecho "[!] Value cannot be empty. No change made."
         fi
@@ -560,8 +448,7 @@ func_settings() {
 
 # --- Main Application Loop ---
 
-# 1. Initialization (Run only once at start)
-# The application entry point logic is now condensed into a single block.
+# 1. Initialization (Handles configuration loading or forces user selection)
 if [[ ! -f "$CURRENT_USER_FILE" ]]; then
     func_switch_user
 else
@@ -598,7 +485,7 @@ aniecho "       MENU
 while true
 do
     echo
-    aniecho "What you want to do $USER_SALUTATION? (Index 0-8) : " false
+    aniecho "What you want to do (Index 0-8) $USER_SALUTATION? : " false
     read to_do
     
     case $to_do in
@@ -627,3 +514,7 @@ do
             ;;
     esac
 done
+
+
+
+
