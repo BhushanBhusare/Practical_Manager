@@ -19,6 +19,8 @@ The software centralizes assignment workflow, guarantees file integrity, and aut
 Prerequisites
 You must be running a Debian-based Linux distribution (like Ubuntu or Kali) to use apt for package installation.
 
+# Setup :
+
 1. Clone the Project    
     git clone : [ git clone https://github.com/BhushanBhusare/Practical_Manager.git && cd Practical_Manager ]
 
@@ -36,6 +38,7 @@ After the setup is complete, run the application as a normal user (without sudo)
 
 
     ./Practical_manager.sh
+
 
 
 
